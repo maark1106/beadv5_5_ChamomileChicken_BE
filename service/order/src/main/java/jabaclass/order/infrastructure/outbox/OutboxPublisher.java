@@ -21,7 +21,7 @@ public class OutboxPublisher {
 	private final OutboxService outboxService;
 	private final KafkaTemplate<String, String> kafkaTemplate;
 
-	@Scheduled(fixedDelay = 1000)
+	@Scheduled(fixedDelay = 3000)
 	public void publish() {
 		LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
 		List<OutboxEvent> events =
@@ -49,9 +49,10 @@ public class OutboxPublisher {
 
 				kafkaTemplate.send(record).get();
 				outboxService.markPublished(event);
+				log.info("[Outbox] 발행 완료. eventType={}, aggregateId={}", event.getEventType(), event.getAggregateId());
 
 			} catch (Exception e) {
-				log.error("Outbox 발행 실패. eventId={}, eventType={}, error={}",
+				log.error("[Outbox] 발행 실패. eventId={}, eventType={}, error={}",
 					event.getId(), event.getEventType(), e.getMessage());
 				outboxService.retry(event);
 			}

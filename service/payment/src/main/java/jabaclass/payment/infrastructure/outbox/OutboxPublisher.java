@@ -10,7 +10,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class OutboxPublisher {
@@ -19,7 +21,7 @@ public class OutboxPublisher {
 	private final OutboxService outboxService;
 	private final KafkaTemplate<String, String> kafkaTemplate;
 
-	@Scheduled(fixedDelay = 1000) // 1초마다 Outbox 이벤트 발행 시도
+	@Scheduled(fixedDelay = 3000)
 	public void publish() {
 
 		// SENDING 상태에서 멈춘 이벤트 찾기

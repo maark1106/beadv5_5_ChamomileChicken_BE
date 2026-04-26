@@ -28,7 +28,7 @@ services:
   mysql:
     image: mysql:8
     ports:
-      - "3306:3306"
+      - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: 1234
     volumes:
@@ -153,6 +153,7 @@ services:
       KAFKA_HOST: kafka
       EXTERNAL_DEPOSITS_BASE_URL: http://user-service:9003
       EXTERNAL_PRODUCTS_BASE_URL: http://product-service:9004
+      EXTERNAL_PAYMENTS_BASE_URL: http://payment-service:9001
     depends_on:
       mysql:
         condition: service_healthy
@@ -236,6 +237,13 @@ services:
       MYSQL_USER: root
       MYSQL_PASSWORD: 1234
       SPRING_DATA_REDIS_HOST: redis
+      USER_SERVICE_URL: http://user-service:9003
+      PAYMENT_SERVICE_URL: http://payment-service:9001
+      PRODUCT_SERVICE_URL: http://product-service:9004
+      ORDER_SERVICE_URL: http://order-service:9005
+      SETTLEMENT_SERVICE_URL: http://settlement-service:9002
+      ADMIN_SERVICE_URL: http://admin-service:9007
+      AI_SERVICE_URL: http://ai-service:9009
     depends_on:
       mysql:
         condition: service_healthy
@@ -260,7 +268,7 @@ services:
   grafana:
     image: grafana/grafana:10.4.2
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=1234

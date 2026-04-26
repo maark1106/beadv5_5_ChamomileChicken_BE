@@ -21,7 +21,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-    show-sql: true
+    show-sql: false
 
   cloud:
     aws:
@@ -42,5 +42,5 @@ spring:
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG            # 실제 실행되는 SQL
-    org.hibernate.type.descriptor.sql: TRACE  # 바인딩 파라미터까지
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql: WARN

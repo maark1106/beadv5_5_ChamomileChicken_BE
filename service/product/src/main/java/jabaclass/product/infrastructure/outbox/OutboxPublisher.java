@@ -21,7 +21,7 @@ public class OutboxPublisher {
 	private final OutboxService outboxService;
 	private final KafkaTemplate<String, String> kafkaTemplate;
 
-	@Scheduled(fixedDelay = 1000)
+	@Scheduled(fixedDelay = 3000)
 	public void publish() {
 		LocalDateTime threshold = LocalDateTime.now().minusMinutes(5);
 		List<OutboxEvent> events = outboxService.findAndMarkSending(threshold, 100);
