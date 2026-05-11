@@ -3,6 +3,7 @@ package jabaclass.payment.infrastructure.external.toss;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import jabaclass.payment.application.port.external.PaymentGatewayPort;
 import lombok.RequiredArgsConstructor;
 
+@Primary
 @Component
 @RequiredArgsConstructor
 public class TossPaymentClient implements PaymentGatewayPort {

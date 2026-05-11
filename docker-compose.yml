@@ -80,6 +80,10 @@ services:
       KAFKA_HOST: kafka
       SPRING_DATA_REDIS_HOST: redis
       GATEWAY_BASE_URL: http://api-gateway:8080
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://tempo:9411/api/v2/spans
+      LOGGING_LEVEL_ZIPKIN2: DEBUG
+      LOGGING_LEVEL_IO_MICROMETER_TRACING: DEBUG
     depends_on:
       mysql:
         condition: service_healthy
@@ -105,6 +109,10 @@ services:
       KAFKA_HOST: kafka
       ORDER_SERVICE_URL: http://order-service:9005
       USER_SERVICE_URL: http://user-service:9003
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://tempo:9411/api/v2/spans
+      LOGGING_LEVEL_ZIPKIN2: DEBUG
+      LOGGING_LEVEL_IO_MICROMETER_TRACING: DEBUG
     depends_on:
       mysql:
         condition: service_healthy
@@ -128,6 +136,8 @@ services:
       KAFKA_HOST: kafka
       ES_URIS: http://elasticsearch:9200
       USER_SERVICE_URL: http://user-service:9003
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://tempo:9411/api/v2/spans
     depends_on:
       mysql:
         condition: service_healthy
@@ -154,6 +164,9 @@ services:
       EXTERNAL_DEPOSITS_BASE_URL: http://user-service:9003
       EXTERNAL_PRODUCTS_BASE_URL: http://product-service:9004
       EXTERNAL_PAYMENTS_BASE_URL: http://payment-service:9001
+      MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://tempo:9411/api/v2/spans
+      MANAGEMENT_ZIPKIN_TRACING_CONNECT_TIMEOUT: "1s"
     depends_on:
       mysql:
         condition: service_healthy
@@ -265,6 +278,17 @@ services:
       - '--storage.tsdb.retention.time=7d'
     restart: unless-stopped
 
+  tempo:
+    image: grafana/tempo:2.4.1
+    ports:
+      - "3200:3200"
+      - "9411:9411"
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/tmp/tempo
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:10.4.2
     ports:
@@ -273,10 +297,13 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=1234
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+      - tempo
     restart: unless-stopped
 
 volumes:
@@ -285,3 +312,4 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  tempo_data:
