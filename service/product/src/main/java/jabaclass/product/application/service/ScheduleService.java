@@ -165,7 +165,7 @@ public class ScheduleService implements ScheduleUseCase {
 		Product product = productUseCase.findByIdOrThrow(schedule.getProductId());
 
 		// 가격 검증 => 실패의 경우
-		if (!product.getPrice().equals(requestDto.price())) {
+		if (product.getPrice().compareTo(requestDto.price()) != 0) {
 			return OrderResponseDto.from(product, requestDto.quantity(), OrderValid.PRICE_MISMATCH, null);
 		}
 

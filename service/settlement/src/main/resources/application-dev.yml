@@ -21,3 +21,11 @@ settlement:
     transfer:
       cron: "30 */3 * * * *"
       target-month-offset-months: 0
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://tempo:9411/api/v2/spans
