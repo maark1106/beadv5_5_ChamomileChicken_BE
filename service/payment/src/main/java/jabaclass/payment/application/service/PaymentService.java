@@ -138,6 +138,71 @@ public class PaymentService implements PaymentUseCase, PaymentSettlementQueryUse
 		}
 	}
 
+	// [성능 테스트 Before] @Transactional로 PG 호출 포함 전체 감쌈 → DB 커넥션을 PG 응답 대기 중에도 점유
+	// gateway를 주입받아 MockTossPaymentClient 사용 가능 — perf 프로파일 없이도 실 Toss와 동시 운영 가능
+	@Transactional
+	public PaymentResponseDto confirmBefore(UUID userId, ConfirmPaymentRequestDto request, PaymentGatewayPort gateway) {
+		Payment payment = paymentRepository.findByOrderId(request.orderId())
+			.orElseThrow(() -> new PaymentException(PaymentErrorCode.PAYMENT_NOT_FOUND));
+
+		if (!payment.getUserId().equals(userId)) {
+			throw new PaymentException(PaymentErrorCode.UNAUTHORIZED_PAYMENT_ACCESS);
+		}
+
+		if (payment.isDone()) {
+			return PaymentResponseDto.from(payment);
+		}
+
+		boolean valid = orderPort.validateOrder(payment.getOrderId(), payment.getTotalAmount().intValue());
+		if (!valid) {
+			throw new PaymentException(PaymentErrorCode.INVALID_ORDER_AMOUNT);
+		}
+
+		if (payment.getPaymentAmount().compareTo(BigDecimal.valueOf(request.amount())) != 0) {
+			throw new PaymentException(PaymentErrorCode.INVALID_PAYMENT_AMOUNT);
+		}
+
+		try {
+			gateway.confirm(request.paymentKey(), payment.getOrderId().toString(), request.amount());
+			return paymentConfirmHandler.onSuccess(payment.getId(), request.paymentKey());
+		} catch (Exception e) {
+			paymentConfirmHandler.onFailure(payment.getId(), payment.getOrderId(), payment.getDepositAmount());
+			throw new PaymentException(PaymentErrorCode.PAYMENT_CONFIRM_FAILED, e);
+		}
+	}
+
+	// [성능 테스트 After] @Transactional 없음 — PG 호출 대기 중 커넥션 미점유
+	// confirm()과 동일한 구조지만 gateway를 주입받아 MockTossPaymentClient 사용 가능
+	public PaymentResponseDto confirmAfterWithMock(UUID userId, ConfirmPaymentRequestDto request, PaymentGatewayPort gateway) {
+		Payment payment = paymentRepository.findByOrderId(request.orderId())
+			.orElseThrow(() -> new PaymentException(PaymentErrorCode.PAYMENT_NOT_FOUND));
+
+		if (!payment.getUserId().equals(userId)) {
+			throw new PaymentException(PaymentErrorCode.UNAUTHORIZED_PAYMENT_ACCESS);
+		}
+
+		if (payment.isDone()) {
+			return PaymentResponseDto.from(payment);
+		}
+
+		boolean valid = orderPort.validateOrder(payment.getOrderId(), payment.getTotalAmount().intValue());
+		if (!valid) {
+			throw new PaymentException(PaymentErrorCode.INVALID_ORDER_AMOUNT);
+		}
+
+		if (payment.getPaymentAmount().compareTo(BigDecimal.valueOf(request.amount())) != 0) {
+			throw new PaymentException(PaymentErrorCode.INVALID_PAYMENT_AMOUNT);
+		}
+
+		try {
+			gateway.confirm(request.paymentKey(), payment.getOrderId().toString(), request.amount());
+			return paymentConfirmHandler.onSuccess(payment.getId(), request.paymentKey());
+		} catch (Exception e) {
+			paymentConfirmHandler.onFailure(payment.getId(), payment.getOrderId(), payment.getDepositAmount());
+			throw new PaymentException(PaymentErrorCode.PAYMENT_CONFIRM_FAILED, e);
+		}
+	}
+
 	// [오케스트레이터] Order 서비스의 동기 HTTP 호출로 진입 — @Transactional 없음
 	// PG 환불 실패 시 예외를 Order로 전파 → Order가 PAID 상태 유지 (보상 불필요)
 	// PG 성공 후 DB 저장 실패는 알려진 한계 — 웹훅/정합성 배치로 별도 복구
