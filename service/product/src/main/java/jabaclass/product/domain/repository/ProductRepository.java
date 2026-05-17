@@ -8,6 +8,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import jabaclass.product.domain.model.Product;
+import jabaclass.product.domain.model.status.CategoryType;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.domain.model.status.ProductStatus;
 
 public interface ProductRepository {
@@ -33,4 +35,6 @@ public interface ProductRepository {
 
 	// ES 초기 마이그레이션용 — 삭제되지 않은 전체 상품 배치 조회
 	Page<Product> findAllByDeleteDtIsNull(Pageable pageable);
+
+	Page<Product> findByCategoryAndRegion(CategoryType category, RegionType region, Pageable pageable);
 }

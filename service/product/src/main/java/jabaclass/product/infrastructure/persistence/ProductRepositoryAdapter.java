@@ -9,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import jabaclass.product.domain.model.Product;
+import jabaclass.product.domain.model.status.CategoryType;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.domain.model.status.ProductStatus;
 import jabaclass.product.domain.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +61,11 @@ public class ProductRepositoryAdapter implements ProductRepository {
 	@Override
 	public Page<Product> findAllByDeleteDtIsNull(Pageable pageable) {
 		return productJpaRepository.findAllByDeleteDtIsNull(pageable);
+	}
+
+	@Override
+	public Page<Product> findByCategoryAndRegion(CategoryType category, RegionType region, Pageable pageable) {
+		return productJpaRepository.findByCategoryAndRegion(category, region, ProductStatus.ENABLE, pageable);
 	}
 
 }
