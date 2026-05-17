@@ -19,9 +19,12 @@ import jabaclass.product.application.usecase.ProductUseCase;
 import jabaclass.product.application.usecase.ProductUserUseCase;
 import jabaclass.product.common.auth.CurrentUser;
 import jabaclass.product.common.exception.ApiResponseDto;
+import jabaclass.product.domain.model.status.CategoryType;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.presentation.dto.request.CreateProductRequestDto;
 import jabaclass.product.presentation.dto.request.SearchProductRequestDto;
 import jabaclass.product.presentation.dto.request.UpdateProductRequestDto;
+import org.springframework.web.bind.annotation.RequestParam;
 import jabaclass.product.presentation.dto.response.DeleteProductResponseDto;
 import jabaclass.product.presentation.dto.response.ProductResponseDto;
 import jabaclass.product.presentation.dto.response.ProductUserResponseDto;
@@ -112,6 +115,17 @@ public class ProductRestController implements ProductOpenApi {
 
 		return ResponseEntity.ok()
 			.body(ApiResponseDto.success(HttpStatus.OK, "성공적으로 검색이 되었습니다.", response));
+	}
+
+	@GetMapping("/filter")
+	public ResponseEntity<ApiResponseDto<SearchProductResponseDto>> filterByCategoryAndRegion(
+		@RequestParam CategoryType category,
+		@RequestParam RegionType region,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "10") int size
+	) {
+		SearchProductResponseDto response = productUseCase.filterByCategoryAndRegion(category, region, page, size);
+		return ResponseEntity.ok(ApiResponseDto.success(HttpStatus.OK, "성공적으로 조회되었습니다.", response));
 	}
 
 	@Override

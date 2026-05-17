@@ -22,6 +22,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jabaclass.product.application.acl.SellerRepository;
 import jabaclass.product.application.exception.BusinessException;
 import jabaclass.product.application.usecase.ProductUseCase;
+import jabaclass.product.domain.model.status.CategoryType;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.application.usecase.ValidateFileUseCase;
 import jabaclass.product.common.exception.CommonErrorCode;
 import jabaclass.product.domain.model.Product;
@@ -86,6 +88,8 @@ public class ProductService implements ProductUseCase {
 			.zonecode(requestDto.zonecode())
 			.latitude(requestDto.latitude())
 			.longitude(requestDto.longitude())
+			.category(requestDto.category())
+			.region(requestDto.region())
 			.build();
 
 		product.changeImages(images);
@@ -115,6 +119,8 @@ public class ProductService implements ProductUseCase {
 		product.changeZonecode(requestDto.zonecode());
 		product.changeLatitude(requestDto.latitude());
 		product.changeLongitude(requestDto.longitude());
+		product.changeCategory(requestDto.category());
+		product.changeRegion(requestDto.region());
 
 		// 이미지 수정 — null이면 기존 이미지 유지
 		if (requestDto.imageIds() != null) {
@@ -235,6 +241,16 @@ public class ProductService implements ProductUseCase {
 			.filter(Objects::nonNull)
 			.map(ProductSettlementItemResponseDto::from)
 			.toList();
+	}
+
+	@Override
+	public SearchProductResponseDto filterByCategoryAndRegion(CategoryType category, RegionType region, int page, int size) {
+		Pageable pageable = PageRequest.of(page, size);
+		Page<Product> result = productRepository.findByCategoryAndRegion(category, region, pageable);
+		List<ProductResponseDto> content = result.getContent().stream()
+			.map(p -> ProductResponseDto.from(p, ""))
+			.toList();
+		return SearchProductResponseDto.from(result, content);
 	}
 
 	@Override
