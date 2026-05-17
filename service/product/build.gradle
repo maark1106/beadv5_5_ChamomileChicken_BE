@@ -48,6 +48,8 @@ dependencies {
     implementation platform('software.amazon.awssdk:bom:2.25.0')
     implementation 'software.amazon.awssdk:s3'
     implementation 'software.amazon.awssdk:s3-transfer-manager'
+
+    implementation 'com.github.f4b6a3:uuid-creator:6.0.0'
 }
 
 tasks.named('test') {

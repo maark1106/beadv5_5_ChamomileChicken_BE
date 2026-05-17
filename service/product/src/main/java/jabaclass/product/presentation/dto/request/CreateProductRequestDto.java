@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jabaclass.product.domain.model.status.CategoryType;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.domain.model.status.ProductStatus;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -56,6 +58,14 @@ public record CreateProductRequestDto(
 
 	@NotNull(message = "경도를 입력해주세요.")
 	@Schema(description = "경도", example = "127.1110")
-	BigDecimal longitude
+	BigDecimal longitude,
+
+	@NotNull(message = "카테고리를 선택해주세요.")
+	@Schema(description = "카테고리", example = "SPORTS")
+	CategoryType category,
+
+	@NotNull(message = "지역을 선택해주세요.")
+	@Schema(description = "지역(구)", example = "GANGNAM")
+	RegionType region
 ) {
 }

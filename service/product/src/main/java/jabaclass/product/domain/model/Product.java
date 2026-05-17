@@ -9,6 +9,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import jabaclass.product.application.exception.BusinessException;
 import jabaclass.product.common.exception.CommonErrorCode;
+import jabaclass.product.domain.model.status.CategoryType;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.domain.model.status.ProductStatus;
 import jabaclass.product.infrastructure.converter.ProductImageItemsConverter;
 import jakarta.persistence.Column;
@@ -77,6 +79,14 @@ public class Product extends EntityBase {
 	@Column(nullable = false, precision = 10, scale = 7)
 	private BigDecimal longitude;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private CategoryType category;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private RegionType region;
+
 	@PrePersist
 	public void prePersist() {
 		if (this.status == null) {
@@ -139,6 +149,14 @@ public class Product extends EntityBase {
 
 	public void changeLongitude(BigDecimal longitude) {
 		this.longitude = longitude;
+	}
+
+	public void changeCategory(CategoryType category) {
+		this.category = category;
+	}
+
+	public void changeRegion(RegionType region) {
+		this.region = region;
 	}
 
 }

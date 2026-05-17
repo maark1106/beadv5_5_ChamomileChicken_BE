@@ -3,7 +3,7 @@ package jabaclass.product.domain.model;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import org.hibernate.annotations.UuidGenerator;
+import jabaclass.product.infrastructure.uuid.GeneratedUuidV7;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -25,7 +25,7 @@ import lombok.experimental.SuperBuilder;
 public abstract class EntityBase {
 
 	@Id
-	@UuidGenerator
+	@GeneratedUuidV7
 	@Column(name = "id", updatable = false, nullable = false)
 	private UUID id;
 
