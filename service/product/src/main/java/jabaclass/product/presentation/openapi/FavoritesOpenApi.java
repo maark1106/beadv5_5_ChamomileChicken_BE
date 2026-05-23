@@ -25,7 +25,7 @@ public interface FavoritesOpenApi {
 		)
 	)
 	@CommonErrorResponses
-	ResponseEntity<ApiResponseDto<FavoritesResponseDto>> create(int quantity, UUID scheduleId, UUID userId);
+	ResponseEntity<ApiResponseDto<FavoritesResponseDto>> create(UUID productId, UUID userId);
 
 	@Operation(summary = "즐겨찾기 해제", description = "즐겨찾기를 해제 합니다.")
 	@ApiResponse(

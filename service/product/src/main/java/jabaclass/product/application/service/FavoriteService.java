@@ -1,12 +1,14 @@
 package jabaclass.product.application.service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jabaclass.product.application.exception.BusinessException;
@@ -14,10 +16,8 @@ import jabaclass.product.application.usecase.FavoriteUseCase;
 import jabaclass.product.common.exception.CommonErrorCode;
 import jabaclass.product.domain.model.Favorite;
 import jabaclass.product.domain.model.Product;
-import jabaclass.product.domain.model.Schedule;
 import jabaclass.product.domain.repository.FavoriteRepository;
 import jabaclass.product.domain.repository.ProductRepository;
-import jabaclass.product.domain.repository.ScheduleRepository;
 import jabaclass.product.infrastructure.event.dto.ProductWishlistedEvent;
 import jabaclass.product.presentation.dto.response.FavoritesResponseDto;
 import lombok.RequiredArgsConstructor;
@@ -28,30 +28,38 @@ import lombok.extern.slf4j.Slf4j;
 @Transactional(readOnly = true)
 @Slf4j
 public class FavoriteService implements FavoriteUseCase {
+
+	private static final String LIKE_COUNT_KEY = "like_count:product:";
+
 	private final FavoriteRepository favoriteRepository;
-	private final ScheduleRepository scheduleRepository;
 	private final ProductRepository productRepository;
 	private final ApplicationEventPublisher publisher;
+	private final StringRedisTemplate redisTemplate;
 
 	@Override
 	@Transactional
-	public FavoritesResponseDto createFavorite(int quantity, UUID scheduleId, UUID userId) {
-		log.info("찜 생성 요청 수신: userId={}, scheduleId={}, quantity={}", userId, scheduleId, quantity);
-		Schedule schedule = scheduleRepository.findByIdAndDeleteDtIsNull(scheduleId)
-			.orElseThrow(() -> new BusinessException(CommonErrorCode.SCHDULES_NOT_FOUND));
-		log.info("찜 대상 일정 조회 완료: scheduleId={}, productId={}", scheduleId, schedule.getProductId());
+	public FavoritesResponseDto createFavorite(UUID productId, UUID userId) {
+		log.info("찜 생성 요청 수신: userId={}, productId={}", userId, productId);
+
+		productRepository.findById(productId)
+			.orElseThrow(() -> new BusinessException(CommonErrorCode.PRODUCT_NOT_FOUND));
+
+		Favorite existing = favoriteRepository.findByUserIdAndProductIdAndDeleteDtIsNull(userId, productId);
+		if (existing != null) {
+			throw new BusinessException(CommonErrorCode.ALREADY_LIKED);
+		}
 
 		Favorite favorite = Favorite.builder()
-			.productScheduleId(scheduleId)
+			.productId(productId)
 			.userId(userId)
-			.quantity(quantity)
 			.build();
 
 		Favorite savedFavorite = favoriteRepository.save(favorite);
-		log.info("찜 저장 완료: favoriteId={}, userId={}, productId={}",
-			savedFavorite.getId(), userId, schedule.getProductId());
-		publisher.publishEvent(ProductWishlistedEvent.of(userId, schedule.getProductId()));
-		log.info("찜 이벤트 발행 요청 완료: userId={}, productId={}", userId, schedule.getProductId());
+		log.info("찜 저장 완료: favoriteId={}, userId={}, productId={}", savedFavorite.getId(), userId, productId);
+
+		incrementLikeCount(productId);
+
+		publisher.publishEvent(ProductWishlistedEvent.of(userId, productId));
 
 		return FavoritesResponseDto.from(savedFavorite);
 	}
@@ -59,8 +67,6 @@ public class FavoriteService implements FavoriteUseCase {
 	@Override
 	@Transactional
 	public void deleteFavorite(UUID favoriteId, UUID userId) {
-
-		// 본인 상품인지 확인
 		Favorite matched = favoriteRepository.findByIdAndUserIdAndDeleteDtIsNull(favoriteId, userId);
 
 		if (matched == null) {
@@ -68,6 +74,7 @@ public class FavoriteService implements FavoriteUseCase {
 		}
 
 		matched.changeDelete();
+		decrementLikeCount(matched.getProductId());
 	}
 
 	@Override
@@ -78,44 +85,81 @@ public class FavoriteService implements FavoriteUseCase {
 			return List.of();
 		}
 
-		// 1. 찜 목록의 스케줄 ID 추출 후 일괄 조회
-		List<UUID> scheduleIds = favorites.stream()
-			.map(Favorite::getProductScheduleId)
-			.toList();
-		Map<UUID, Schedule> scheduleMap = scheduleRepository.findAllByIdInAndDeleteDtIsNull(scheduleIds)
-			.stream()
-			.collect(Collectors.toMap(Schedule::getId, s -> s));
-
-		// 2. 유효한 스케줄의 상품 ID 추출 후 일괄 조회
-		List<UUID> productIds = scheduleMap.values().stream()
-			.map(Schedule::getProductId)
+		List<UUID> productIds = favorites.stream()
+			.map(Favorite::getProductId)
 			.distinct()
 			.toList();
+
 		Map<UUID, Product> productMap = productRepository.findAllByIdsAndDeleteDtIsNull(productIds)
 			.stream()
 			.collect(Collectors.toMap(Product::getId, p -> p));
 
-		// 3. 유효한 찜 항목만 응답 생성
 		return favorites.stream()
 			.filter(f -> {
-				if (!scheduleMap.containsKey(f.getProductScheduleId())) {
-					log.warn("찜 항목의 일정을 찾을 수 없습니다. favoriteId={}, scheduleId={}",
-						f.getId(), f.getProductScheduleId());
-					return false;
-				}
-				Schedule schedule = scheduleMap.get(f.getProductScheduleId());
-				if (!productMap.containsKey(schedule.getProductId())) {
-					log.warn("찜 항목의 상품을 찾을 수 없습니다. favoriteId={}, productId={}",
-						f.getId(), schedule.getProductId());
+				if (!productMap.containsKey(f.getProductId())) {
+					log.warn("찜 항목의 상품을 찾을 수 없습니다. favoriteId={}, productId={}", f.getId(), f.getProductId());
 					return false;
 				}
 				return true;
 			})
-			.map(f -> {
-				Schedule schedule = scheduleMap.get(f.getProductScheduleId());
-				Product product = productMap.get(schedule.getProductId());
-				return FavoritesResponseDto.from(f, schedule, product);
-			})
+			.map(f -> FavoritesResponseDto.from(f, productMap.get(f.getProductId())))
 			.toList();
+	}
+
+	@Override
+	public Map<UUID, Long> getLikeCountBatch(List<UUID> productIds) {
+		Map<UUID, Long> dbCounts = new HashMap<>(favoriteRepository.countGroupByProductIdIn(productIds));
+		productIds.forEach(id -> dbCounts.putIfAbsent(id, 0L));
+		dbCounts.forEach((id, count) ->
+			redisTemplate.opsForValue().setIfAbsent(LIKE_COUNT_KEY + id, String.valueOf(count))
+		);
+		return dbCounts;
+	}
+
+	@Override
+	public Map<UUID, Long> getLikeCountBatchNoCache(List<UUID> productIds) {
+		Map<UUID, Long> dbCounts = new HashMap<>(favoriteRepository.countGroupByProductIdIn(productIds));
+		productIds.forEach(id -> dbCounts.putIfAbsent(id, 0L));
+		return dbCounts;
+	}
+
+	@Override
+	public long getLikeCount(UUID productId) {
+		String key = LIKE_COUNT_KEY + productId;
+		String cached = redisTemplate.opsForValue().get(key);
+
+		if (cached != null) {
+			return Long.parseLong(cached);
+		}
+
+		// Redis miss: DB에서 COUNT 조회 후 SETNX로 캐싱
+		long count = favoriteRepository.countByProductIdAndDeleteDtIsNull(productId);
+		redisTemplate.opsForValue().setIfAbsent(key, String.valueOf(count));
+		return count;
+	}
+
+	private void incrementLikeCount(UUID productId) {
+		try {
+			String key = LIKE_COUNT_KEY + productId;
+			// 키가 없으면 DB 기준으로 초기화 후 INCR
+			if (Boolean.FALSE.equals(redisTemplate.hasKey(key))) {
+				long count = favoriteRepository.countByProductIdAndDeleteDtIsNull(productId);
+				redisTemplate.opsForValue().setIfAbsent(key, String.valueOf(count));
+			}
+			redisTemplate.opsForValue().increment(key);
+		} catch (Exception e) {
+			log.warn("Redis like_count INCR 실패 (productId={}): {}", productId, e.getMessage());
+		}
+	}
+
+	private void decrementLikeCount(UUID productId) {
+		try {
+			String key = LIKE_COUNT_KEY + productId;
+			if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+				redisTemplate.opsForValue().decrement(key);
+			}
+		} catch (Exception e) {
+			log.warn("Redis like_count DECR 실패 (productId={}): {}", productId, e.getMessage());
+		}
 	}
 }
