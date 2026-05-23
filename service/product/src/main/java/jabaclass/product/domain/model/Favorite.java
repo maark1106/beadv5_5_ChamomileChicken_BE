@@ -19,13 +19,10 @@ import lombok.experimental.SuperBuilder;
 @Table(name = "products_likes", schema = "public")
 public class Favorite extends EntityBase {
 
-	@Column(name = "product_schedule_id", nullable = false)
-	private UUID productScheduleId;
+	@Column(name = "product_id", nullable = false)
+	private UUID productId;
 
 	@Column(name = "user_id", updatable = false, nullable = false)
 	private UUID userId;
-
-	@Column(nullable = false)
-	private int quantity;
 
 }

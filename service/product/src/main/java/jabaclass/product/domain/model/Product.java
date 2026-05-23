@@ -87,6 +87,10 @@ public class Product extends EntityBase {
 	@Column(nullable = false, length = 20)
 	private RegionType region;
 
+	@Builder.Default
+	@Column(name = "view_count", nullable = false)
+	private long viewCount = 0L;
+
 	@PrePersist
 	public void prePersist() {
 		if (this.status == null) {
@@ -157,6 +161,10 @@ public class Product extends EntityBase {
 
 	public void changeRegion(RegionType region) {
 		this.region = region;
+	}
+
+	public void syncViewCount(long viewCount) {
+		this.viewCount = viewCount;
 	}
 
 }

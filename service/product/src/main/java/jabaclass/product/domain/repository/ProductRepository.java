@@ -37,4 +37,8 @@ public interface ProductRepository {
 	Page<Product> findAllByDeleteDtIsNull(Pageable pageable);
 
 	Page<Product> findByCategoryAndRegion(CategoryType category, RegionType region, Pageable pageable);
+
+	void updateViewCount(UUID productId, long viewCount);
+
+	void incrementViewCount(UUID productId);
 }
