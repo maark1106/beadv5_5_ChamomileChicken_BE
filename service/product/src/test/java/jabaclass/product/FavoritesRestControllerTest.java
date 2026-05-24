@@ -32,7 +32,7 @@ class FavoritesRestControllerTest {
 	@Mock
 	private FavoriteUseCase favoriteUseCase;
 
-	private static final UUID SCHEDULE_ID = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
+	private static final UUID PRODUCT_ID = UUID.fromString("123e4567-e89b-12d3-a456-426614174000");
 	private static final UUID FAVORITE_ID = UUID.fromString("223e4567-e89b-12d3-a456-426614174000");
 	private static final UUID USER_ID = UUID.fromString("323e4567-e89b-12d3-a456-426614174000");
 
@@ -41,9 +41,8 @@ class FavoritesRestControllerTest {
 	@BeforeEach
 	void setUp() {
 		favorite = Favorite.builder()
-			.productScheduleId(SCHEDULE_ID)
+			.productId(PRODUCT_ID)
 			.userId(USER_ID)
-			.quantity(2)
 			.build();
 		ReflectionTestUtils.setField(favorite, "id", FAVORITE_ID);
 	}
@@ -51,14 +50,14 @@ class FavoritesRestControllerTest {
 	@Test
 	void 즐겨찾기_생성_요청이_들어오면_유스케이스를_호출한다() {
 		FavoritesResponseDto response = FavoritesResponseDto.from(favorite);
-		given(favoriteUseCase.createFavorite(2, SCHEDULE_ID, USER_ID)).willReturn(response);
+		given(favoriteUseCase.createFavorite(PRODUCT_ID, USER_ID)).willReturn(response);
 
-		ResponseEntity<ApiResponseDto<FavoritesResponseDto>> result = favoritesRestController.create(2, SCHEDULE_ID, USER_ID);
+		ResponseEntity<ApiResponseDto<FavoritesResponseDto>> result = favoritesRestController.create(PRODUCT_ID, USER_ID);
 
 		assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 		assertThat(result.getBody()).isNotNull();
 		assertThat(result.getBody().getData()).isEqualTo(response);
-		then(favoriteUseCase).should().createFavorite(2, SCHEDULE_ID, USER_ID);
+		then(favoriteUseCase).should().createFavorite(PRODUCT_ID, USER_ID);
 	}
 
 	@Test
