@@ -47,4 +47,10 @@ public interface ProductUseCase {
 	int migrateToEs();
 
 	SearchProductResponseDto filterByCategoryAndRegion(CategoryType category, RegionType region, int page, int size);
+
+	// 성능 비교용 - Redis 없이 DB 직접 조회
+	SearchProductResponseDto searchAllNoCache(SearchProductRequestDto requestDto);
+
+	// 성능 비교용 - 상세 조회 시 DB UPDATE view_count
+	ProductResponseDto searchByIdNoCache(UUID productId);
 }

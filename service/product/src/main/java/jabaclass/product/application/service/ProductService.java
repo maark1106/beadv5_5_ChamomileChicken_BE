@@ -1,5 +1,6 @@
 package jabaclass.product.application.service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,6 +14,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,31 +23,32 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jabaclass.product.application.acl.SellerRepository;
 import jabaclass.product.application.exception.BusinessException;
+import jabaclass.product.application.usecase.FavoriteUseCase;
 import jabaclass.product.application.usecase.ProductUseCase;
-import jabaclass.product.domain.model.status.CategoryType;
-import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.application.usecase.ValidateFileUseCase;
 import jabaclass.product.common.exception.CommonErrorCode;
 import jabaclass.product.domain.model.Product;
 import jabaclass.product.domain.model.ProductImageItem;
+import jabaclass.product.domain.model.status.CategoryType;
 import jabaclass.product.domain.model.status.ProductStatus;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.domain.repository.ProductRepository;
 import jabaclass.product.domain.repository.ProductSearchRepository;
 import jabaclass.product.infrastructure.acl.dto.response.UserResponseDto;
 import jabaclass.product.infrastructure.elasticsearch.ProductDocument;
-import jabaclass.product.infrastructure.event.dto.ProductAiSyncedEvent;   // 추가
-import jabaclass.product.infrastructure.event.dto.ProductDeletedEvent;    // 추가
+import jabaclass.product.infrastructure.event.dto.ProductAiSyncedEvent;
+import jabaclass.product.infrastructure.event.dto.ProductDeletedEvent;
 import jabaclass.product.infrastructure.event.dto.ProductEventResponseDto;
 import jabaclass.product.infrastructure.event.dto.ProductViewedEvent;
 import jabaclass.product.infrastructure.kafka.ProductEsIndexMessage;
 import jabaclass.product.infrastructure.outbox.EsEventType;
 import jabaclass.product.infrastructure.outbox.OutboxEvent;
 import jabaclass.product.infrastructure.outbox.OutboxRepository;
+import jabaclass.product.application.dto.FileConfirmResponse;
 import jabaclass.product.presentation.dto.request.CreateProductRequestDto;
 import jabaclass.product.presentation.dto.request.SearchProductRequestDto;
 import jabaclass.product.presentation.dto.request.UpdateProductRequestDto;
 import jabaclass.product.presentation.dto.response.DeleteProductResponseDto;
-import jabaclass.product.application.dto.FileConfirmResponse;
 import jabaclass.product.presentation.dto.response.ProductResponseDto;
 import jabaclass.product.presentation.dto.response.ProductSettlementItemResponseDto;
 import jabaclass.product.presentation.dto.response.SearchProductResponseDto;
@@ -55,6 +58,10 @@ import jabaclass.product.presentation.dto.response.SearchProductResponseDto;
 @RequiredArgsConstructor
 @Slf4j
 public class ProductService implements ProductUseCase {
+
+	private static final String VIEW_COUNT_KEY = "view_count:product:";
+	private static final String LIKE_COUNT_KEY = "like_count:product:";
+
 	private final ProductRepository productRepository;
 	private final ProductSearchRepository productSearchRepository;
 	private final SellerRepository sellerRepository;
@@ -62,6 +69,8 @@ public class ProductService implements ProductUseCase {
 	private final ValidateFileUseCase validateFileUseCase;
 	private final OutboxRepository outboxRepository;
 	private final ObjectMapper objectMapper;
+	private final StringRedisTemplate redisTemplate;
+	private final FavoriteUseCase favoriteUseCase;
 
 	@Override
 	@Transactional
@@ -98,10 +107,11 @@ public class ProductService implements ProductUseCase {
 		UserResponseDto seller = findBySellerIdOrThrow(sellerId);
 
 		publisher.publishEvent(new ProductEventResponseDto(saved.getId()));
-		publisher.publishEvent(ProductAiSyncedEvent.from(saved));           // 추가
+		publisher.publishEvent(ProductAiSyncedEvent.from(saved));
 		saveEsSaveOutbox(saved, seller.name());
 		return ProductResponseDto.from(saved, seller.name());
 	}
+
 	@Override
 	@Transactional
 	public ProductResponseDto update(UpdateProductRequestDto requestDto, UUID productId, UUID sellerId) {
@@ -122,7 +132,6 @@ public class ProductService implements ProductUseCase {
 		product.changeCategory(requestDto.category());
 		product.changeRegion(requestDto.region());
 
-		// 이미지 수정 — null이면 기존 이미지 유지
 		if (requestDto.imageIds() != null) {
 			List<ProductImageItem> images = List.of();
 			if (!requestDto.imageIds().isEmpty()) {
@@ -136,7 +145,7 @@ public class ProductService implements ProductUseCase {
 			product.changeImages(images);
 		}
 		UserResponseDto seller = findBySellerIdOrThrow(sellerId);
-		publisher.publishEvent(ProductAiSyncedEvent.from(product));         // 추가
+		publisher.publishEvent(ProductAiSyncedEvent.from(product));
 		saveEsSaveOutbox(product, seller.name());
 		return ProductResponseDto.from(product, seller.name());
 	}
@@ -144,37 +153,61 @@ public class ProductService implements ProductUseCase {
 	@Override
 	@Transactional
 	public DeleteProductResponseDto delete(UUID productId, UUID sellerId) {
-		// 상품 존재하는지 확인
 		Product product = findByIdOrThrow(productId);
-		// 본인 상품인지 확인
 		matchProductAndSellerId(productId, sellerId);
 
 		product.changeStatus(ProductStatus.DISABLE);
 		product.changeDelete();
-		publisher.publishEvent(ProductDeletedEvent.of(productId));          // 추가
+		publisher.publishEvent(ProductDeletedEvent.of(productId));
 		saveEsDeleteOutbox(productId.toString());
 
 		return DeleteProductResponseDto.from(productId, ProductStatus.DISABLE);
 	}
 
-	// es 추가
+	// MySQL 최신순 조회 + Redis 카운터 조합
 	@Override
 	public SearchProductResponseDto searchAll(SearchProductRequestDto requestDto) {
 		Pageable pageable = PageRequest.of(requestDto.thisPage(), requestDto.pageSize());
 
-		Page<ProductDocument> page;
+		Page<Product> page;
 		if (requestDto.title() == null || requestDto.title().isBlank()) {
-			page = productSearchRepository.findAllEnabled(pageable);
+			page = productRepository.findByStatusAndDeleteDtIsNull(ProductStatus.ENABLE, pageable);
 		} else {
-			page = productSearchRepository.searchByKeyword(requestDto.title(), pageable);
+			page = productRepository.findByStatusAndTitleContainingAndDeleteDtIsNull(
+				ProductStatus.ENABLE, requestDto.title(), pageable);
 		}
 
-		// ES 문서에 sellerName이 비정규화되어 있어 user 서비스 추가 호출 불필요
+		List<UUID> productIds = page.getContent().stream().map(Product::getId).toList();
+		List<UUID> sellerIds = page.getContent().stream().map(Product::getSellerId).distinct().toList();
+
+		Map<UUID, String> sellerNameMap = sellerRepository.findSellerList(sellerIds)
+			.map(list -> list.stream().collect(Collectors.toMap(UserResponseDto::userId, UserResponseDto::name)))
+			.orElse(Map.of());
+
+		Map<UUID, Long> likeCounts = batchGetCounts(productIds, LIKE_COUNT_KEY);
+		Map<UUID, Long> viewCounts = batchGetCounts(productIds, VIEW_COUNT_KEY);
+
+		List<UUID> likeMissIds = productIds.stream().filter(id -> !likeCounts.containsKey(id)).toList();
+		if (!likeMissIds.isEmpty()) {
+			likeCounts.putAll(favoriteUseCase.getLikeCountBatch(likeMissIds));
+		}
+
+		List<Product> viewMissProducts = page.getContent().stream()
+			.filter(p -> !viewCounts.containsKey(p.getId()))
+			.toList();
+		if (!viewMissProducts.isEmpty()) {
+			viewCounts.putAll(writeViewCountCache(viewMissProducts));
+		}
+
 		List<ProductResponseDto> content = page.getContent().stream()
-			.map(ProductResponseDto::from)
+			.map(p -> ProductResponseDto.from(
+				p,
+				sellerNameMap.getOrDefault(p.getSellerId(), ""),
+				likeCounts.getOrDefault(p.getId(), 0L),
+				viewCounts.getOrDefault(p.getId(), p.getViewCount())))
 			.toList();
 
-		return SearchProductResponseDto.fromEs(page, content);
+		return SearchProductResponseDto.from(page, content);
 	}
 
 	@Override
@@ -189,25 +222,39 @@ public class ProductService implements ProductUseCase {
 			page = productSearchRepository.searchByKeywordAndSellerId(requestDto.title(), sellerIdStr, pageable);
 		}
 
+		List<UUID> productIds = page.getContent().stream()
+			.map(doc -> UUID.fromString(doc.getId()))
+			.toList();
+
+		Map<UUID, Long> likeCounts = batchGetCounts(productIds, LIKE_COUNT_KEY);
+		Map<UUID, Long> viewCounts = batchGetCounts(productIds, VIEW_COUNT_KEY);
+
 		List<ProductResponseDto> content = page.getContent().stream()
-			.map(ProductResponseDto::from)
+			.map(doc -> {
+				UUID id = UUID.fromString(doc.getId());
+				return ProductResponseDto.from(doc, likeCounts.getOrDefault(id, 0L), viewCounts.getOrDefault(id, 0L));
+			})
 			.toList();
 
 		return SearchProductResponseDto.fromEs(page, content);
 	}
 
+	// 정적 데이터(DB) + 동적 데이터(Redis) 조합
 	@Override
 	public ProductResponseDto searchById(UUID productId, UUID userId) {
 		Product product = findByIdOrThrow(productId);
-
 		UserResponseDto seller = findBySellerIdOrThrow(product.getSellerId());
+
+		long likeCount = favoriteUseCase.getLikeCount(productId);
+		long viewCount = incrementAndGetViewCount(product);
+
 		if (userId != null) {
 			log.info("상품 조회 이벤트 발행 준비: userId={}, productId={}", userId, productId);
 			publisher.publishEvent(ProductViewedEvent.of(userId, productId));
 			log.info("상품 조회 이벤트 발행 완료: userId={}, productId={}", userId, productId);
 		}
 
-		return ProductResponseDto.from(product, seller.name());
+		return ProductResponseDto.from(product, seller.name(), likeCount, viewCount);
 	}
 
 	@Override
@@ -217,7 +264,6 @@ public class ProductService implements ProductUseCase {
 	}
 
 	@Override
-	// 해당 상품 보유자인지 확인
 	public Product matchProductAndSellerId(UUID productId, UUID sellerId) {
 		return productRepository.findByIdAndSellerId(productId, sellerId)
 			.orElseThrow(() -> new BusinessException(CommonErrorCode.MATCH_FAIL));
@@ -229,9 +275,7 @@ public class ProductService implements ProductUseCase {
 			return List.of();
 		}
 
-		List<UUID> distinctProductIds = productIds.stream()
-			.distinct()
-			.toList();
+		List<UUID> distinctProductIds = productIds.stream().distinct().toList();
 
 		Map<UUID, Product> productMap = productRepository.findAllByIds(distinctProductIds).stream()
 			.collect(Collectors.toMap(Product::getId, product -> product));
@@ -247,9 +291,31 @@ public class ProductService implements ProductUseCase {
 	public SearchProductResponseDto filterByCategoryAndRegion(CategoryType category, RegionType region, int page, int size) {
 		Pageable pageable = PageRequest.of(page, size);
 		Page<Product> result = productRepository.findByCategoryAndRegion(category, region, pageable);
-		List<ProductResponseDto> content = result.getContent().stream()
-			.map(p -> ProductResponseDto.from(p, ""))
+
+		List<UUID> productIds = result.getContent().stream().map(Product::getId).toList();
+		Map<UUID, Long> likeCounts = batchGetCounts(productIds, LIKE_COUNT_KEY);
+		Map<UUID, Long> viewCounts = batchGetCounts(productIds, VIEW_COUNT_KEY);
+
+		List<UUID> likeMissIds = productIds.stream().filter(id -> !likeCounts.containsKey(id)).toList();
+		if (!likeMissIds.isEmpty()) {
+			likeCounts.putAll(favoriteUseCase.getLikeCountBatch(likeMissIds));
+		}
+
+		List<Product> viewMissProducts = result.getContent().stream()
+			.filter(p -> !viewCounts.containsKey(p.getId()))
 			.toList();
+		if (!viewMissProducts.isEmpty()) {
+			viewCounts.putAll(writeViewCountCache(viewMissProducts));
+		}
+
+		List<ProductResponseDto> content = result.getContent().stream()
+			.map(p -> ProductResponseDto.from(
+				p,
+				"",
+				likeCounts.getOrDefault(p.getId(), 0L),
+				viewCounts.getOrDefault(p.getId(), p.getViewCount())))
+			.toList();
+
 		return SearchProductResponseDto.from(result, content);
 	}
 
@@ -295,6 +361,105 @@ public class ProductService implements ProductUseCase {
 		return totalIndexed;
 	}
 
+	// 성능 비교용 - 상세 조회 시 DB UPDATE view_count (Redis INCR 없음)
+	@Override
+	@Transactional
+	public ProductResponseDto searchByIdNoCache(UUID productId) {
+		Product product = findByIdOrThrow(productId);
+		UserResponseDto seller = findBySellerIdOrThrow(product.getSellerId());
+		long likeCount = favoriteUseCase.getLikeCount(productId);
+
+		productRepository.incrementViewCount(productId);
+		long viewCount = product.getViewCount() + 1;
+
+		return ProductResponseDto.from(product, seller.name(), likeCount, viewCount);
+	}
+
+	// 성능 비교용 - Redis 없이 DB 직접 조회
+	@Override
+	public SearchProductResponseDto searchAllNoCache(SearchProductRequestDto requestDto) {
+		Pageable pageable = PageRequest.of(requestDto.thisPage(), requestDto.pageSize());
+
+		Page<Product> page;
+		if (requestDto.title() == null || requestDto.title().isBlank()) {
+			page = productRepository.findByStatusAndDeleteDtIsNull(ProductStatus.ENABLE, pageable);
+		} else {
+			page = productRepository.findByStatusAndTitleContainingAndDeleteDtIsNull(
+				ProductStatus.ENABLE, requestDto.title(), pageable);
+		}
+
+		List<UUID> productIds = page.getContent().stream().map(Product::getId).toList();
+		List<UUID> sellerIds = page.getContent().stream().map(Product::getSellerId).distinct().toList();
+
+		Map<UUID, String> sellerNameMap = sellerRepository.findSellerList(sellerIds)
+			.map(list -> list.stream().collect(Collectors.toMap(UserResponseDto::userId, UserResponseDto::name)))
+			.orElse(Map.of());
+
+		Map<UUID, Long> likeCounts = favoriteUseCase.getLikeCountBatchNoCache(productIds);
+
+		List<ProductResponseDto> content = page.getContent().stream()
+			.map(p -> ProductResponseDto.from(
+				p,
+				sellerNameMap.getOrDefault(p.getSellerId(), ""),
+				likeCounts.getOrDefault(p.getId(), 0L),
+				p.getViewCount()))
+			.toList();
+
+		return SearchProductResponseDto.from(page, content);
+	}
+
+	// Redis view_count: 없으면 DB값으로 초기화 후 INCR
+	private long incrementAndGetViewCount(Product product) {
+		String key = VIEW_COUNT_KEY + product.getId();
+		try {
+			if (Boolean.FALSE.equals(redisTemplate.hasKey(key))) {
+				redisTemplate.opsForValue().setIfAbsent(key, String.valueOf(product.getViewCount()));
+			}
+			Long count = redisTemplate.opsForValue().increment(key);
+			return count != null ? count : product.getViewCount();
+		} catch (Exception e) {
+			log.warn("Redis view_count INCR 실패 (productId={}): {}", product.getId(), e.getMessage());
+			return product.getViewCount();
+		}
+	}
+
+	private Map<UUID, Long> writeViewCountCache(List<Product> products) {
+		Map<UUID, Long> result = products.stream()
+			.collect(Collectors.toMap(Product::getId, Product::getViewCount));
+		try {
+			result.forEach((id, count) ->
+				redisTemplate.opsForValue().setIfAbsent(VIEW_COUNT_KEY + id, String.valueOf(count)));
+		} catch (Exception e) {
+			log.warn("Redis view_count write-through 실패: {}", e.getMessage());
+		}
+		return result;
+	}
+
+	// Redis multiGet으로 카운터 배치 조회 (목록 조회 N+1 방지)
+	private Map<UUID, Long> batchGetCounts(List<UUID> productIds, String keyPrefix) {
+		if (productIds.isEmpty()) {
+			return new HashMap<>();
+		}
+		List<String> keys = productIds.stream().map(id -> keyPrefix + id).toList();
+		try {
+			List<String> values = redisTemplate.opsForValue().multiGet(keys);
+			if (values == null) {
+				return new HashMap<>();
+			}
+			Map<UUID, Long> result = new HashMap<>();
+			for (int i = 0; i < productIds.size(); i++) {
+				String value = values.get(i);
+				if (value != null) {
+					result.put(productIds.get(i), Long.parseLong(value));
+				}
+			}
+			return result;
+		} catch (Exception e) {
+			log.warn("Redis batch count 조회 실패: {}", e.getMessage());
+			return new HashMap<>();
+		}
+	}
+
 	private void saveEsOutbox(String aggregateId, EsEventType eventType, Object message) {
 		try {
 			String payload = objectMapper.writeValueAsString(message);
@@ -314,12 +479,8 @@ public class ProductService implements ProductUseCase {
 		saveEsOutbox(productId, EsEventType.ES_DELETE, ProductEsIndexMessage.delete(productId));
 	}
 
-	// 로그인 계정 여부
 	private UserResponseDto findBySellerIdOrThrow(UUID sellerId) {
-		UserResponseDto sellerInfo = sellerRepository.findSeller(sellerId)
+		return sellerRepository.findSeller(sellerId)
 			.orElseThrow(() -> new BusinessException(CommonErrorCode.SELLER_NOT_FOUND));
-
-		return sellerInfo;
 	}
-
 }
