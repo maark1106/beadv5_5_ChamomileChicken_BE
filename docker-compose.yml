@@ -136,6 +136,8 @@ services:
       KAFKA_HOST: kafka
       ES_URIS: http://elasticsearch:9200
       USER_SERVICE_URL: http://user-service:9003
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "1.0"
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://tempo:9411/api/v2/spans
     depends_on:

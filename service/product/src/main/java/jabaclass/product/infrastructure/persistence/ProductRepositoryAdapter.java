@@ -68,4 +68,14 @@ public class ProductRepositoryAdapter implements ProductRepository {
 		return productJpaRepository.findByCategoryAndRegion(category, region, ProductStatus.ENABLE, pageable);
 	}
 
+	@Override
+	public void updateViewCount(UUID productId, long viewCount) {
+		productJpaRepository.updateViewCount(productId, viewCount);
+	}
+
+	@Override
+	public void incrementViewCount(UUID productId) {
+		productJpaRepository.incrementViewCount(productId);
+	}
+
 }

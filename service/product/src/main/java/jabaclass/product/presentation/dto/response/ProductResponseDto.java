@@ -59,10 +59,16 @@ public record ProductResponseDto(
 	BigDecimal latitude,
 
 	@Schema(description = "경도", example = "127.1110")
-	BigDecimal longitude
+	BigDecimal longitude,
+
+	@Schema(description = "좋아요 수", example = "42")
+	long likeCount,
+
+	@Schema(description = "조회수", example = "1024")
+	long viewCount
 ) {
 
-	public static ProductResponseDto from(Product product, String sellerName) {
+	public static ProductResponseDto from(Product product, String sellerName, long likeCount, long viewCount) {
 		List<ProductImageItem> images = product.getDescriptionImages();
 		List<String> imagePaths = images == null ? List.of()
 			: images.stream().map(ProductImageItem::storagePath).toList();
@@ -83,11 +89,18 @@ public record ProductResponseDto(
 			product.getDetailAddress(),
 			product.getZonecode(),
 			product.getLatitude(),
-			product.getLongitude()
+			product.getLongitude(),
+			likeCount,
+			viewCount
 		);
 	}
 
-	public static ProductResponseDto from(ProductDocument document) {
+	// 생성/수정 응답용 (카운터 불필요)
+	public static ProductResponseDto from(Product product, String sellerName) {
+		return from(product, sellerName, 0L, 0L);
+	}
+
+	public static ProductResponseDto from(ProductDocument document, long likeCount, long viewCount) {
 		return new ProductResponseDto(
 			UUID.fromString(document.getId()),
 			document.getSellerName(),
@@ -104,8 +117,14 @@ public record ProductResponseDto(
 			null,
 			null,
 			null,
-			null
+			null,
+			likeCount,
+			viewCount
 		);
 	}
 
+	// 목록 조회 시 Redis miss인 경우 0으로 반환
+	public static ProductResponseDto from(ProductDocument document) {
+		return from(document, 0L, 0L);
+	}
 }

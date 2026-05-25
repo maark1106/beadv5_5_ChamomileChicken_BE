@@ -21,7 +21,9 @@ import org.springframework.http.ResponseEntity;
 import jabaclass.product.application.usecase.ProductUseCase;
 import jabaclass.product.application.usecase.ProductUserUseCase;
 import jabaclass.product.common.exception.ApiResponseDto;
+import jabaclass.product.domain.model.status.CategoryType;
 import jabaclass.product.domain.model.status.ProductStatus;
+import jabaclass.product.domain.model.status.RegionType;
 import jabaclass.product.domain.model.status.ReservationStatus;
 import jabaclass.product.presentation.controller.ProductRestController;
 import jabaclass.product.presentation.dto.request.CreateProductRequestDto;
@@ -56,32 +58,19 @@ class ProductRestControllerTest {
 	@BeforeEach
 	void setUp() {
 		createRequest = new CreateProductRequestDto(
-			SELLER_ID,
-			"상품",
-			10,
-			"설명",
-			List.of(UUID.randomUUID()),
-			new BigDecimal("10000"),
-			ProductStatus.ENABLE,
-			"경기 성남시 분당구 판교역로 166",
-			"카카오 판교 아지트 1층",
-			"13529",
-			new BigDecimal("37.3952000"),
-			new BigDecimal("127.1110000")
+			SELLER_ID, "상품", 10, "설명",
+			List.of(UUID.randomUUID()), new BigDecimal("10000"), ProductStatus.ENABLE,
+			"경기 성남시 분당구 판교역로 166", "카카오 판교 아지트 1층", "13529",
+			new BigDecimal("37.3952000"), new BigDecimal("127.1110000"),
+			CategoryType.SPORTS, RegionType.GANGNAM
 		);
 
 		updateRequest = new UpdateProductRequestDto(
-			"수정상품",
-			20,
-			"수정설명",
-			List.of(UUID.randomUUID()),
-			new BigDecimal("20000"),
-			ProductStatus.DISABLE,
-			"서울 강남구 테헤란로 123",
-			"3층",
-			"06234",
-			new BigDecimal("37.1234567"),
-			new BigDecimal("127.7654321")
+			"수정상품", 20, "수정설명",
+			List.of(UUID.randomUUID()), new BigDecimal("20000"), ProductStatus.DISABLE,
+			"서울 강남구 테헤란로 123", "3층", "06234",
+			new BigDecimal("37.1234567"), new BigDecimal("127.7654321"),
+			CategoryType.SPORTS, RegionType.GANGNAM
 		);
 
 		productResponse = new ProductResponseDto(
@@ -100,7 +89,9 @@ class ProductRestControllerTest {
 			"카카오 판교 아지트 1층",
 			"13529",
 			new BigDecimal("37.3952000"),
-			new BigDecimal("127.1110000")
+			new BigDecimal("127.1110000"),
+			0L,
+			0L
 		);
 	}
 

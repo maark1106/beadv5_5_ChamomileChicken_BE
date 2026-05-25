@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -42,4 +43,12 @@ public interface ProductJpaRepository extends JpaRepository<Product, UUID> {
 		@Param("region") RegionType region,
 		@Param("status") ProductStatus status,
 		Pageable pageable);
+
+	@Modifying
+	@Query("UPDATE Product p SET p.viewCount = :viewCount WHERE p.id = :productId")
+	void updateViewCount(@Param("productId") UUID productId, @Param("viewCount") long viewCount);
+
+	@Modifying
+	@Query("UPDATE Product p SET p.viewCount = p.viewCount + 1 WHERE p.id = :productId")
+	void incrementViewCount(@Param("productId") UUID productId);
 }

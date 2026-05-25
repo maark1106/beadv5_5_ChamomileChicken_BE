@@ -92,7 +92,7 @@ API Gateway
 | `Schedule` | 상품별 날짜/시간 정보 | `productId`, `scheduleDt`, `startTime`, `endTime`, `status`, `capacity` |
 | `ProductUser` | 특정 일정에 대한 예약 사용자 | `productScheduleId`, `userId`, `guestCount`, `status`, `restoreStatus` |
 | `Review` | 상품 리뷰 | `productId`, `userId`, `rating`, `content` |
-| `Favorite` | 일정 찜 | `productScheduleId`, `userId`, `quantity` |
+| `Favorite` | 상품 찜 | `productId`, `userId` |
 
 ### 상태값
 
@@ -166,10 +166,13 @@ infrastructure/elasticsearch/
 | 상품 생성 | 이미지 확인, 상품 저장, 판매자 조회, ES 저장 이벤트 발행 |
 | 상품 수정 | 소유권 검증, 필드 수정, 이미지 재확인, ES 저장 이벤트 발행 |
 | 상품 삭제 | soft delete 처리, ES 삭제 이벤트 발행 |
-| 상품 검색 | ES 조회 기반 목록 반환 |
-| 상품 단건 조회 | 상품 조회 후 판매자 이름 조합 |
+| 상품 목록 조회 | MySQL 최신순 조회 + Redis multiGet으로 카운터 배치 조합 |
+| 상품 단건 조회 | DB(정적 정보) + Redis(좋아요 수, 조회수) 조합 반환, 조회수 INCR |
+| 카테고리/지역 필터 조회 | MySQL 필터 조회 + Redis multiGet 카운터 조합 |
 | 정산용 조회 | product id 목록으로 상품 정보 반환 |
 | ES 마이그레이션 | DB 데이터를 ES로 재색인 |
+
+> 상품 조회 응답은 정적 데이터(DB)와 동적 카운터(Redis)를 애플리케이션에서 조합해서 반환한다. 자세한 내용은 [redis-counter.md](redis-counter.md) 참고.
 
 ### ScheduleService
 
@@ -207,9 +210,12 @@ infrastructure/elasticsearch/
 
 | 기능 | 설명 |
 |------|------|
-| 찜 생성 | 찜 엔티티 저장 |
-| 찜 삭제 | 본인 찜 검증 후 soft delete |
-| 사용자별 찜 조회 | 활성 찜 목록 반환 |
+| 찜 생성 | 상품 존재 확인, 중복 찜 방지, DB 저장, Redis like_count INCR |
+| 찜 삭제 | 본인 찜 검증 후 soft delete, Redis like_count DECR |
+| 사용자별 찜 조회 | 활성 찜 목록 반환 (상품 단위) |
+| 좋아요 수 조회 | Redis 우선 조회, miss 시 DB COUNT(*) + SETNX 캐싱 |
+
+> 찜은 기존 스케줄 단위에서 **상품 단위**로 변경되었다. 마이페이지에서 찜한 상품 목록 확인 후 결제 시 스케줄을 다시 선택하는 흐름이다.
 
 ---
 
@@ -391,8 +397,17 @@ FavoritesRestController
 
 ### 부가 기능
 - [x] 리뷰 생성/수정/삭제/조회 구현
-- [x] 찜 생성/삭제/조회 구현
+- [x] 찜 생성/삭제/조회 구현 (상품 단위로 변경)
 - [x] 상품 검색의 ES 연동 구현
+
+### Redis 카운터
+- [x] product 서비스 Redis 설정 추가
+- [x] 좋아요 수 Redis 카운터 (INCR/DECR + miss 시 DB fallback)
+- [x] 조회수 Redis 카운터 (INCR + SETNX 초기화)
+- [x] 상품 목록 조회 시 Redis multiGet 배치 조회
+- [x] 상품 응답에 likeCount, viewCount 포함
+- [x] 좋아요 수 보정 스케줄러 (매일 새벽 3시 DB 기준 재동기화)
+- [x] 조회수 DB 동기화 스케줄러 (매시 정각 Redis → DB)
 
 ### 운영 정비 포인트
 - [ ] `products_users.status` 제약조건을 현재 enum 기준으로 정리

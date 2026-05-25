@@ -58,6 +58,8 @@ public enum CommonErrorCode {
 	NOT_BUY_USER(HttpStatus.NOT_FOUND, "예약자가 존재하지 않습니다."),
 	// 404 본인 즐겨찾기가 아닙니다.
 	NOT_MATCH_USER_LIKE(HttpStatus.NOT_FOUND, "본인의 즐겨찾기가 아닙니다."),
+	// 409 이미 찜한 상품입니다.
+	ALREADY_LIKED(HttpStatus.CONFLICT, "이미 찜한 상품입니다."),
 	// 404 본인 즐겨찾기가 아닙니다.
 	NOT_MATCH_USER_REVIEW(HttpStatus.NOT_FOUND, "본인의 리뷰가 아닙니다."),
 	// 404 리뷰가 존재하지 않습니다.

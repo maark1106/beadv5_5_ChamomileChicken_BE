@@ -117,6 +117,23 @@ public class ProductRestController implements ProductOpenApi {
 			.body(ApiResponseDto.success(HttpStatus.OK, "성공적으로 검색이 되었습니다.", response));
 	}
 
+	// 성능 비교용 - 상세 조회 DB UPDATE view_count
+	@GetMapping("/{productId}/no-cache")
+	public ResponseEntity<ApiResponseDto<ProductResponseDto>> searchByIdNoCache(@PathVariable UUID productId) {
+		ProductResponseDto response = productUseCase.searchByIdNoCache(productId);
+		return ResponseEntity.ok()
+			.body(ApiResponseDto.success(HttpStatus.OK, "성공적으로 조회되었습니다.", response));
+	}
+
+	// 성능 비교용 - Redis 없이 DB 직접 조회
+	@GetMapping("/no-cache")
+	public ResponseEntity<ApiResponseDto<SearchProductResponseDto>> searchAllNoCache(
+		@ModelAttribute SearchProductRequestDto request) {
+		SearchProductResponseDto response = productUseCase.searchAllNoCache(request);
+		return ResponseEntity.ok()
+			.body(ApiResponseDto.success(HttpStatus.OK, "성공적으로 조회되었습니다.", response));
+	}
+
 	@GetMapping("/filter")
 	public ResponseEntity<ApiResponseDto<SearchProductResponseDto>> filterByCategoryAndRegion(
 		@RequestParam CategoryType category,

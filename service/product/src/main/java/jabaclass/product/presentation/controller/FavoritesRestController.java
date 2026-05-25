@@ -30,19 +30,20 @@ public class FavoritesRestController implements FavoritesOpenApi {
 	private final FavoriteUseCase favoriteUseCase;
 
 	@Override
-	@PostMapping("/{scheduleId}/likes")
-	public ResponseEntity<ApiResponseDto<FavoritesResponseDto>> create(@RequestParam int quantity,
-		@PathVariable UUID scheduleId,
+	@PostMapping("/{productId}/likes")
+	public ResponseEntity<ApiResponseDto<FavoritesResponseDto>> create(
+		@PathVariable UUID productId,
 		@CurrentUser UUID userId) {
-		FavoritesResponseDto response = favoriteUseCase.createFavorite(quantity, scheduleId, userId);
+		FavoritesResponseDto response = favoriteUseCase.createFavorite(productId, userId);
 
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.body(ApiResponseDto.success(HttpStatus.CREATED, "성공적으로 등록 되었습니다.", response));
 	}
 
 	@Override
-	@DeleteMapping("/{scheduleId}/likes")
-	public ResponseEntity<ApiResponseDto<FavoritesResponseDto>> delete(@RequestParam UUID likeId,
+	@DeleteMapping("/{productId}/likes")
+	public ResponseEntity<ApiResponseDto<FavoritesResponseDto>> delete(
+		@RequestParam UUID likeId,
 		@CurrentUser UUID userId) {
 		favoriteUseCase.deleteFavorite(likeId, userId);
 
